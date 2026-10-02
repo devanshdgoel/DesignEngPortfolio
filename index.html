@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Devansh Goel — Portfolio</title>
+
+  <!-- JetBrains Mono for the small UI bits (nav, wipe label). The slides themselves are images. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ══════════════════════════════════════════════════════════
+       LAYER 0 — BACKGROUND (fixed)
+       ══════════════════════════════════════════════════════════ -->
+  <div id="bg" aria-hidden="true"></div>
+
+
+  <!-- ══════════════════════════════════════════════════════════
+       LAYER 1 — STAGE (fixed, never scrolls)
+       #frame is the 1190 × 842 slide window, fitted to the screen.
+       #strip holds every slide image stacked vertically; scrolling
+       moves the strip up inside the frame (see main.js).
+       The side panels fill the space left and right of the frame —
+       empty for now, ready for your patterns (styles.css → SIDES).
+       ══════════════════════════════════════════════════════════ -->
+  <div id="stage">
+    <div class="side side-left"  aria-hidden="true"></div>
+    <div id="frame">
+      <div id="strip"></div>
+    </div>
+    <div class="side side-right" aria-hidden="true"></div>
+  </div>
+
+
+  <!-- LAYER 1.5 — CIRCUIT SPARKS: tiny sparks running along a hidden circuit
+       board, lighting up the traces around them (drawn by main.js, part 5) -->
+  <canvas id="pcb" aria-hidden="true"></canvas>
+
+
+  <!-- LAYER 2 — GLITCH CANVAS (short bursts, drawn by main.js) -->
+  <canvas id="glitch" aria-hidden="true"></canvas>
+
+
+  <!-- LAYER 3 — PROJECT WIPE (the orange screen between projects) -->
+  <div id="transition" aria-hidden="true">
+    <div id="transition-label"></div>
+  </div>
+
+
+  <!-- LAYER 4 — CONTENTS → NAV MORPH
+       Copies of the four Contents tiles that fly up into the nav bar
+       as you leave the Contents page (built by main.js). -->
+  <div id="morph" aria-hidden="true"></div>
+
+
+  <!-- LAYER 5 — DIGITAL PATTERN OVERLAY (fixed, permanent filter, never scrolls) -->
+  <div id="overlay" aria-hidden="true"></div>
+
+
+  <!-- UI — hidden during the intro; revealed by the Contents morph -->
+  <button id="brand" type="button">Devansh Goel</button>
+  <nav id="project-nav"></nav>
+  <div id="progress-bar"></div>
+  <div id="scroll-hint">
+    <div class="chevron"></div>
+    <div class="scroll-label">Scroll</div>
+  </div>
+
+
+  <!-- SCROLL SPACER — its height creates the scroll distance.
+       main.js sets it from the holds + transitions in the config.
+       (On mobile / reduced motion the slides are placed in here instead.) -->
+  <main id="scroll-root"></main>
+
+
+  <!-- SCRIPTS: GSAP + ScrollTrigger, then the site. No server needed —
+       everything else is local, so you can just double-click this file. -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>

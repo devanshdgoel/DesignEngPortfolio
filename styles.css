@@ -1,0 +1,368 @@
+/* ============================================================
+ *  PORTFOLIO v2 — styles.css
+ *
+ *  SECTIONS:  TOKENS · RESET · STAGE & FRAME · SIDES · LAYERS
+ *             · TRANSITION · UI · FLOW MODE (mobile / reduced motion)
+ * ============================================================ */
+
+
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root {
+  --bg:        #100D0D;                  /* matches assets/site-background.png */
+  --accent:    #EB4604;
+  --ui-dim:    rgba(200, 210, 220, 0.4);
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --overlay-opacity:    1;               /* the overlay image is already 5% opaque; lower this to fade it further */
+  --overlay-blend:      screen;
+  --transition-opacity: 0.97;            /* orange wipe panel */
+
+  /* Written by main.js: size of the slide window on screen */
+  --frame-w: 100vw;
+  --frame-h: 100vh;
+}
+
+
+/* ============================================================
+   RESET
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: var(--bg); color: #f2f4f8; overflow-x: hidden; }
+img { display: block; user-select: none; -webkit-user-drag: none; }
+
+
+/* ============================================================
+   STAGE & FRAME
+   The stage is fixed to the viewport. The frame (one slide) is
+   centred and fitted to the screen; the strip of slides moves
+   up inside it.
+   ============================================================ */
+#bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  background: var(--bg) url("assets/site-background.png") center / cover;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+#frame {
+  position: relative;
+  flex: 0 0 auto;
+  width:  var(--frame-w);
+  height: var(--frame-h);
+  overflow: hidden;
+  transform-origin: 50% 50%;
+}
+
+#strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  /* height = number of slides × frame height (set by main.js) */
+}
+#strip img {
+  width:  100%;
+  height: var(--frame-h);
+  object-fit: cover;
+  background: var(--bg);
+}
+
+
+/* ============================================================
+   SIDES — the space left/right of the slide on wide screens.
+   Empty for now: add your pattern as a background-image here.
+   ============================================================ */
+.side {
+  flex: 1 1 0;
+  align-self: stretch;
+  /* background: url("assets/side-pattern.png") center / cover; */
+}
+
+
+/* ============================================================
+   LAYERS ABOVE THE SLIDES
+   ============================================================ */
+/* Circuit sparks: screen-blended, so only the light adds to the slides
+   (dark parts of the canvas leave the slide untouched). */
+#pcb {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  pointer-events: none;
+  mix-blend-mode: screen;
+}
+body.flow #pcb { display: none; }
+
+#glitch {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* Pattern overlay: one image stretched over the whole screen, fixed in place,
+   screen-blended on top of every other layer (slides, wipes, morph and UI).
+   The image itself is 5% opaque. */
+#overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;        /* above everything, including the nav */
+  pointer-events: none;
+  background: url("assets/overlay.png") center / cover no-repeat;
+  mix-blend-mode: var(--overlay-blend);
+  opacity: var(--overlay-opacity);
+}
+
+#scroll-root {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+}
+
+
+/* ============================================================
+   TRANSITION — orange project wipe (same as v1)
+   ============================================================ */
+#transition {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: var(--accent);
+  opacity: var(--transition-opacity);
+  clip-path: inset(100% 0 0 0);          /* hidden until main.js wipes it */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#transition-label {
+  font-family: var(--font-mono);
+  font-size: clamp(1rem, 2.4vw, 2rem);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #0b0b0c;
+}
+
+
+/* ============================================================
+   UI — nav, progress bar, scroll hint
+   ============================================================ */
+/* Nav bar: a dark glass pill, top right. Each button: "01 STRIDE". */
+#project-nav {
+  position: fixed;
+  top: 1.2rem;
+  right: 1.4rem;
+  z-index: 10;
+  display: flex;
+  gap: 0.2rem;
+  padding: 0.3rem;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 999px;
+  background: rgba(16, 13, 13, 0.62);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.nav-btn {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45em;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(235, 238, 242, 0.72);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  cursor: pointer;
+  transition: color 0.25s, background-color 0.25s;
+}
+.nav-num { color: var(--accent); font-size: 0.85em; }
+.nav-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
+.nav-btn.is-active { color: #fff; background: rgba(235, 70, 4, 0.16); box-shadow: inset 0 0 0 1px rgba(235, 70, 4, 0.55); }
+
+/* Name, top left — back to the start */
+#brand {
+  position: fixed;
+  top: 1.2rem;
+  left: 1.4rem;
+  z-index: 10;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(235, 238, 242, 0.85);
+  background: none;
+  border: none;
+  padding: 0.85rem 0.4rem;
+  cursor: pointer;
+}
+#brand:hover { color: var(--accent); }
+
+/* Contents → nav morph tiles, and clickable areas on the Contents slide */
+#morph {
+  position: fixed;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+}
+#morph { visibility: hidden; }          /* shown by main.js only while tiles are flying */
+.morph-tile {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: hidden;
+  background: rgba(16, 13, 13, 0.85);
+  box-shadow: inset 0 0 0 1px rgba(235, 70, 4, 0.55);
+  will-change: transform, width, height;
+}
+.morph-img {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background-repeat: no-repeat;
+  will-change: transform, opacity;
+}
+.morph-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.45em;
+  padding-top: 0.55rem;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fff;
+  opacity: 0;
+}
+/* Covers the original Contents tile while its copy flies to the nav */
+.contents-hole {
+  position: absolute;
+  background: #100E0C;                  /* the Contents slide's background */
+  opacity: 0;
+  pointer-events: none;
+}
+.contents-hotspot {
+  position: absolute;
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: box-shadow 0.25s, background-color 0.25s;
+}
+.contents-hotspot:hover {
+  background: rgba(235, 70, 4, 0.08);
+  box-shadow: 0 0 0 2px var(--accent), 0 0 24px rgba(235, 70, 4, 0.35);
+}
+
+#progress-bar {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  width: 0%;
+  z-index: 10;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(235, 70, 4, 0.55);
+  pointer-events: none;
+}
+
+#scroll-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 1.8rem;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  pointer-events: none;
+  transition: opacity 0.5s;
+}
+#scroll-hint.is-hidden { opacity: 0; }
+.chevron {
+  width: 12px;
+  height: 12px;
+  border-right: 1px solid rgba(235, 70, 4, 0.85);
+  border-bottom: 1px solid rgba(235, 70, 4, 0.85);
+  transform: rotate(45deg);
+  animation: hint-bob 1.8s ease-in-out infinite;
+}
+.scroll-label {
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ui-dim);
+}
+@keyframes hint-bob {
+  0%, 100% { transform: translateY(0) rotate(45deg); opacity: 0.4; }
+  50%      { transform: translateY(6px) rotate(45deg); opacity: 1; }
+}
+
+
+/* ============================================================
+   FLOW MODE — mobile (< 768px) and prefers-reduced-motion.
+   Slides are simply stacked full-width in the page; no holds.
+   ============================================================ */
+body.flow #stage,
+body.flow #glitch,
+body.flow #transition,
+body.flow #morph,
+body.flow #brand,
+body.flow #scroll-hint { display: none; }
+
+body.flow #scroll-root { pointer-events: auto; }
+body.flow #scroll-root img { width: 100%; height: auto; }
+
+body.flow #project-nav {
+  left: 0; right: 0; top: 0;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0;
+  padding: 0.4rem 0.5rem;
+  border: none;
+  border-radius: 0;
+  background: rgba(16, 13, 13, 0.85);
+}
+body.flow .nav-btn { padding: 0.45rem 0.55rem; font-size: 0.6rem; letter-spacing: 0.1em; }
+
+.flow-divider {
+  padding: 2.2rem 16px;
+  background: var(--accent);
+  color: #0b0b0c;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
