@@ -2,8 +2,8 @@
 /* ═══════════════════════════════════════════════════════════════════════
  *  PORTFOLIO v2 — main.js
  *
- *  The Figma layout, rendered to one image per slide (slides/*.webp),
- *  shown one slide at a time. Scrolling works like this for every slide:
+ *  The Figma layout, exported to one image per slide (slides/*.webp,
+ *  by tools/figma_export.py), shown one slide at a time, filling the screen. Scrolling works like this for every slide:
  *
  *      ── HOLD ──────────────── TRAVEL ──── HOLD ──────────────── TRAVEL ──
  *      (you scroll, nothing     (the page    (next slide sits
@@ -14,8 +14,8 @@
  *  you scroll. When you stop mid-travel, it snaps to the nearest slide.
  *
  *  PARTS:  1. SETTINGS + PROJECTS   2. SLIDES (order + transitions)
- *          3. BUILD (strip, timeline, nav)   4. GLITCH   5. CIRCUIT SPARKS
- *          6. FLOW MODE
+ *          3. BUILD (strip, layers, render sequences, timeline, nav)
+ *          4. GLITCH   5. CIRCUIT SPARKS   6. FLOW MODE
  * ═══════════════════════════════════════════════════════════════════════ */
 
 
@@ -23,13 +23,21 @@
  *  1. SETTINGS + PROJECTS
  * ═══════════════════════════════════════════════════════════════════════ */
 const SETTINGS = {
+  fit:       "cover",  // "cover": slides fill the whole screen (a little is trimmed off the edges to fit)
+                       // "contain": the whole slide is always visible, with gaps beside it
+  maxTrim:   [0.06, 0.08],   // "cover" trims at most this much of the slide per side [left/right, top/bottom],
+                             // so text near the edges stays on screen; on unusually wide or tall windows
+                             // the rest is a thin margin in the slide background colour
+
   // ── Pacing ──
   holdVH:    12,     // scroll on each slide where nothing moves (was 60)
   travelVH:  45,     // scroll to move to the next slide
   wipeVH:    65,     // scroll for an orange project wipe
   fadeVH:    48,     // scroll for a fade-through transition
+  scrubVH:   170,    // scroll for a render sequence played by scrolling (Stride 1 → 2)
+  explodeVH: 80,     // scroll for the explode (Stride 3 → 4) — short, so it hits hard
   snap:      true,   // finish a page change automatically when scrolling stops
-  commitAt:  0.08,   // how far into a change (0–1) before it always completes (one wheel notch is enough)
+  commitVH:  1.5,    // scroll (vh) into a change after which it always completes (less than one wheel notch)
   landInVH:  6,      // after an auto-finish, land this far inside the new slide's hold
   snapDuration: [0.9, 1.4],    // seconds an auto-finished change takes (min, max) — higher = slower, easier to follow
   scrub:     1,      // smoothing (seconds): the page eases after the scrollbar instead of jumping with it
@@ -73,53 +81,67 @@ const PROJECTS = {
 /* ═══════════════════════════════════════════════════════════════════════
  *  2. SLIDES — in scroll order
  *
+ *  n           the slide number in slides/manifest.js (NN.webp). The orange
+ *              screens in Figma are left out by the export: "wipe" replaces them.
  *  transition  how we ARRIVE at this slide:
  *                "slide" (default)  the page moves up
  *                "wipe"             orange project screen with the label
  *                "fade"             fades out, then the next fades in
+ *                "scrub"            a render sequence plays as you scroll, starting
+ *                                   from a layer of the previous slide, then fades
+ *                                   into this one  (scrub: { sequence, over, fadeAt })
+ *                "explode"          the page moves up, then render sequences play on
+ *                                   top of this slide's layers and its labels draw in
+ *                                   (explode: [{ sequence, over, fit }, ...]; fit = [scale, x, y]
+ *                                   when the still was rendered with a different camera: the
+ *                                   sequence pulls back to that framing as it plays)
+ *  animate     a layer animation as the slide arrives: "wheel" | "drift"
  *  settle      true → tiny zoom-out as the slide lands (used on covers)
  *  glitch      true → short glitch burst as the slide lands
  *  hold        optional: this slide's own hold length (vh)
  *
- *  The orange screens in the PDF (s10, s16, s21) aren't listed: the "wipe"
- *  transition replaces them. s28–s30 are empty and left out.
+ *  Layer and sequence names come from LIFT in tools/figma_export.py and
+ *  SEQUENCES in tools/build_sequences.py.
  * ═══════════════════════════════════════════════════════════════════════ */
 const SLIDES = [
   // ── Intro ──
-  { src: "slides/s01.webp", project: "intro", glitch: true },          // Portfolio cover
-  { src: "slides/s02.webp", project: "intro" },                        // About me
-  { src: "slides/s03.webp", project: "intro" },                        // Contents
+  { n: 1,  project: "intro", glitch: true },                           // Portfolio cover
+  { n: 2,  project: "intro" },                                         // About me
+  { n: 3,  project: "intro" },                                         // Contents
 
   // ── 01 Stride ──
-  { src: "slides/s04.webp", project: "stride", transition: "wipe", settle: true, glitch: true },
-  { src: "slides/s05.webp", project: "stride" },                       // Mechanical development
-  { src: "slides/s06.webp", project: "stride" },                       // Prototyping / Electrical
-  { src: "slides/s07.webp", project: "stride" },                       // Components
-  { src: "slides/s08.webp", project: "stride" },                       // CMF and packaging
-  { src: "slides/s09.webp", project: "stride", transition: "fade" },   // User validation (full-bleed photo)
+  { n: 4,  project: "stride", transition: "wipe", settle: true, glitch: true },          // Stride cover
+  { n: 5,  project: "stride", transition: "scrub",                                       // Mechanical development
+           scrub: { sequence: "cover3", over: "cane", fadeAt: 347 }, animate: "wheel" },
+  { n: 6,  project: "stride" },                                        // Prototyping / Electrical
+  { n: 7,  project: "stride", transition: "explode",                   // Components
+           explode: [{ sequence: "explode2", over: "top" },                  // the still is frame 0245
+                     { sequence: "explode1", over: "bottom", fit: [0.77, 0.115, 0.119] }] },   // the still is a wider shot
+  { n: 8,  project: "stride" },                                        // CMF and packaging
+  { n: 9,  project: "stride", transition: "fade" },                    // User validation (full-bleed photo)
 
   // ── 02 SOLUS ──
-  { src: "slides/s11.webp", project: "solus", transition: "wipe", settle: true, glitch: true },
-  { src: "slides/s12.webp", project: "solus" },                        // Structures
-  { src: "slides/s13.webp", project: "solus" },                        // Concept and prototyping
-  { src: "slides/s14.webp", project: "solus" },                        // Generative design
-  { src: "slides/s15.webp", project: "solus" },                        // Design language
+  { n: 10, project: "solus", transition: "wipe", settle: true, glitch: true },
+  { n: 11, project: "solus", animate: "drift" },                       // Structures
+  { n: 12, project: "solus" },                                         // Concept and prototyping
+  { n: 13, project: "solus" },                                         // Generative design
+  { n: 14, project: "solus" },                                         // Design language
 
   // ── 03 FlexiCook ──
-  { src: "slides/s17.webp", project: "flexicook", transition: "wipe", settle: true, glitch: true },
-  { src: "slides/s18.webp", project: "flexicook" },                    // User research
-  { src: "slides/s19.webp", project: "flexicook" },                    // Design and prototyping
-  { src: "slides/s20.webp", project: "flexicook" },                    // Final design
+  { n: 15, project: "flexicook", transition: "wipe", settle: true, glitch: true },
+  { n: 16, project: "flexicook" },                                     // User research
+  { n: 17, project: "flexicook" },                                     // Design and prototyping
+  { n: 18, project: "flexicook" },                                     // Final design
 
   // ── 04 Calyx ──
-  { src: "slides/s22.webp", project: "calyx", transition: "wipe", settle: true, glitch: true },
-  { src: "slides/s23.webp", project: "calyx" },                        // Concept development
-  { src: "slides/s24.webp", project: "calyx" },                        // Product analysis
-  { src: "slides/s25.webp", project: "calyx" },                        // Prototyping
-  { src: "slides/s26.webp", project: "calyx" },                        // Device body
+  { n: 19, project: "calyx", transition: "wipe", settle: true, glitch: true },
+  { n: 20, project: "calyx" },                                         // Concept development
+  { n: 21, project: "calyx" },                                         // Product analysis
+  { n: 22, project: "calyx" },                                         // Prototyping
+  { n: 23, project: "calyx" },                                         // Device body
 
   // ── Outro ──
-  { src: "slides/s27.webp", project: "outro", transition: "fade", hold: 40 },   // Thank you
+  { n: 24, project: "outro", transition: "fade", hold: 40 },           // Thank you
 ];
 
 
@@ -133,9 +155,9 @@ const CONTENTS = {
   morph: true,
   tiles: [
     { project: "stride",    rect: [100, 286, 328, 597] },
-    { project: "solus",     rect: [355, 286, 583, 597] },
-    { project: "flexicook", rect: [609, 286, 836, 597] },
-    { project: "calyx",     rect: [862, 286, 1090, 597] },
+    { project: "solus",     rect: [383, 286, 611, 597] },
+    { project: "flexicook", rect: [665, 286, 892, 597] },
+    { project: "calyx",     rect: [946, 286, 1174, 597] },
   ],
 };
 
@@ -145,7 +167,9 @@ const CONTENTS = {
  * ═══════════════════════════════════════════════════════════════════════ */
 gsap.registerPlugin(ScrollTrigger);
 
-const SLIDE_W = 1190, SLIDE_H = 842;   // Figma slide size (pt)
+const FIGMA = window.FIGMA;                        // slides/manifest.js
+const SEQ   = window.SEQUENCES || {};               // sequences/sequences.js
+const SLIDE_W = FIGMA.slideW, SLIDE_H = FIGMA.slideH;   // Figma slide size (pt)
 const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const MOBILE  = window.innerWidth < SETTINGS.mobileBreakpoint;
 const FLOW    = REDUCED || MOBILE;
@@ -162,6 +186,7 @@ const N = SLIDES.length;
 let current = 0;                 // index of the slide on screen
 let st = null;                   // the ScrollTrigger (stage mode)
 let stops = [];                  // { start, end, mid } of each hold, in timeline units (vh)
+let free = [];                   // [from, to] stretches where a scroll-played sequence stays where you stop
 let total = 0;                   // total timeline length (vh)
 
 const vh = () => window.innerHeight / 100;
@@ -170,32 +195,154 @@ const projectText = (key) => {
   return [p.label, p.name].filter(Boolean).join(" / ");
 };
 
+// Each slide's entry in the Figma manifest.
+SLIDES.forEach((s) => {
+  s.fig = FIGMA.slides[s.n - 1];
+  if (!s.fig) throw new Error(`[v2] Slide ${s.n} isn't in slides/manifest.js — re-run tools/figma_export.py?`);
+  s.src = s.fig.src;
+});
+
 // One <img> per slide. They load a few at a time (see loadAround).
+// Slides with animated layers show their background here; the layers go on top.
 const imgs = SLIDES.map((s) => {
   const img = new Image();
   img.alt = "";
   img.decoding = "async";
-  img.dataset.src = s.src;
+  img.dataset.src = (!FLOW && s.fig.bg) || s.src;
   return img;
 });
 
+const players = {};              // render sequences by name (see makeSequence)
+
 function loadAround(i) {
   for (let k = i - 1; k <= i + SETTINGS.preload; k++) {
-    const img = imgs[k];
-    if (img && !img.getAttribute("src")) img.src = img.dataset.src;
+    const s = SLIDES[k];
+    if (!s) continue;
+    [imgs[k], ...Object.values(s.layerEls || {})].forEach((img) => {
+      if (img.dataset.src && !img.getAttribute("src")) img.src = img.dataset.src;
+    });
   }
+  // Render sequences are heavier: start loading them two slides ahead.
+  Object.values(players).forEach((p) => { if (p.slide >= i - 1 && p.slide <= i + 2) p.load(); });
 }
 
-/* ── Fit the slide window to the screen (like "contain") ── */
+/* ── Fit the slide window to the screen ──
+ *  "cover" fills the screen, trimming whatever doesn't fit evenly from both
+ *  sides (up to SETTINGS.maxTrim); "contain" shows the whole slide.          */
 function fitFrame() {
-  const s = Math.min(window.innerWidth / SLIDE_W, window.innerHeight / SLIDE_H);
+  const W = window.innerWidth, H = window.innerHeight;
+  const contain = Math.min(W / SLIDE_W, H / SLIDE_H);
+  const [tx, ty] = SETTINGS.maxTrim;
+  const s = SETTINGS.fit === "contain" ? contain
+    : Math.max(contain, Math.min(Math.max(W / SLIDE_W, H / SLIDE_H),
+                                 W / (SLIDE_W * (1 - 2 * tx)), H / (SLIDE_H * (1 - 2 * ty))));
   root.style.setProperty("--frame-w", SLIDE_W * s + "px");
   root.style.setProperty("--frame-h", SLIDE_H * s + "px");
   sizeGlitchCanvas();
 }
 
+/* ── Put an element on slide i, at [x, y, w, h] in Figma points ──
+ *  It lives in the strip, so it moves with its slide.                        */
+function placeOnSlide(el, i, [x, y, w, h]) {
+  Object.assign(el.style, {
+    left:   (x / SLIDE_W) * 100 + "%",
+    width:  (w / SLIDE_W) * 100 + "%",
+    top:    `calc(var(--frame-h) * ${i + y / SLIDE_H})`,
+    height: `calc(var(--frame-h) * ${h / SLIDE_H})`,
+  });
+}
+
+/* ── Animated layers: one <img> per layer lifted out in Figma ── */
+function buildLayers() {
+  SLIDES.forEach((s, i) => {
+    const layers = s.fig.layers;
+    if (!layers) return;
+    s.layerEls = {};
+    Object.entries(layers).forEach(([name, L]) => {
+      const img = new Image();
+      img.alt = "";
+      img.decoding = "async";
+      img.className = "layer";
+      img.dataset.src = L.src;
+      placeOnSlide(img, i, L.rect);
+      strip.appendChild(img);
+      s.layerEls[name] = img;
+    });
+  });
+}
+
+/* ── Render sequences ──
+ *  A canvas that shows one frame of a Blender render sequence at a time,
+ *  placed exactly where the matching still sits in Figma (`over` = that
+ *  layer), so its first or last frame lines up with the still.               */
+function makeSequence(name, i, over) {
+  const meta = SEQ[name];
+  const L = SLIDES[i].fig.layers?.[over];
+  if (!meta || !L) { console.warn(`[v2] Sequence "${name}" or layer "${over}" missing.`); return null; }
+  const clip = L.rect, rect = L.imageRect || L.rect;
+
+  const box = document.createElement("div");
+  box.className = "seq";
+  placeOnSlide(box, i, clip);
+  const canvas = document.createElement("canvas");
+  Object.assign(canvas.style, {
+    left:   ((rect[0] - clip[0]) / clip[2]) * 100 + "%",
+    top:    ((rect[1] - clip[1]) / clip[3]) * 100 + "%",
+    width:  (rect[2] / clip[2]) * 100 + "%",
+    height: (rect[3] / clip[3]) * 100 + "%",
+  });
+  box.appendChild(canvas);
+  strip.appendChild(box);
+
+  // The canvas is the whole render, at the frames' resolution (frames may be cropped).
+  const [cx, cy, cw, ch] = meta.crop;
+  canvas.width  = Math.round(meta.size[0] / cw);
+  canvas.height = Math.round(meta.size[1] / ch);
+  const ctx = canvas.getContext("2d");
+  const frames = [];
+  let want = 0, shown = -1;
+  const ready = (k) => frames[k] && frames[k].complete && frames[k].naturalWidth;
+
+  const p = {
+    el: box, n: meta.frames, slide: i,
+    load() {
+      if (frames.length) return;
+      // First and last frames first (they're what you see at rest), then the rest in order.
+      const order = [0, meta.frames - 1, ...Array.from({ length: meta.frames - 2 }, (_, k) => k + 1)];
+      order.forEach((k) => {
+        const im = new Image();
+        im.decoding = "async";
+        im.onload = () => { if (shown < 0 || Math.abs(k - want) < Math.abs(shown - want)) p.draw(want); };
+        im.src = meta.dir + String(k).padStart(4, "0") + ".webp";
+        frames[k] = im;
+      });
+    },
+    draw(f) {
+      want = Math.max(0, Math.min(meta.frames - 1, Math.round(f)));
+      // The nearest frame that has loaded (while the sequence is still streaming in).
+      let k = -1;
+      for (let d = 0; d < meta.frames && k < 0; d++) {
+        if (ready(want - d)) k = want - d; else if (ready(want + d)) k = want + d;
+      }
+      if (k < 0 || k === shown) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(frames[k], cx * canvas.width, cy * canvas.height, cw * canvas.width, ch * canvas.height);
+      shown = k;
+    },
+    // Where a Blender frame number falls in the sequence, 0–1.
+    at(sourceFrame) {
+      const [first, last] = meta.sourceFrames;
+      return Math.max(0, Math.min(1, (sourceFrame - first) / (last - first)));
+    },
+  };
+  players[name] = p;
+  return p;
+}
+
 /* ── Transitions: each adds tweens for "arrive at slide i", starting at time t ──
- *  Strip position: slide i is at yPercent = -(i / N) * 100 of the strip.   */
+ *  Strip position: slide i is at yPercent = -(i / N) * 100 of the strip.
+ *  Each returns { d, reveal, free }: its length, when the new slide first
+ *  shows (for `animate`), and optionally a stretch that isn't snapped.      */
 const TRANSITIONS = {
 
   // The page moves up to the next slide.
@@ -206,7 +353,7 @@ const TRANSITIONS = {
       tl.to(frame, { scale: 1.03, ease: "sine.in", duration: d / 2 }, t);
       tl.to(frame, { scale: 1, ease: "power2.out", duration: d / 2 }, t + d / 2);
     }
-    return d;
+    return { d, reveal: t };
   },
 
   // Orange screen wipes up with the project label; the slide changes underneath
@@ -228,7 +375,7 @@ const TRANSITIONS = {
     }
     tl.to(label, { yPercent: -120, autoAlpha: 0, ease: "power2.in", duration: d * 0.2 }, t + d * 0.55);
     tl.to(panel, { clipPath: "inset(0% 0% 100% 0%)", ease: "power2.inOut", duration: d * 0.45 }, t + d * 0.55);
-    return d;
+    return { d, reveal: t + d * 0.5 };
   },
 
   // Current slide fades to the background, then the next one fades in.
@@ -237,27 +384,143 @@ const TRANSITIONS = {
     tl.to(frame, { autoAlpha: 0, ease: "power1.in", duration: d * 0.45 }, t);
     tl.set(strip, { yPercent: -(i / N) * 100 }, t + d * 0.5);
     tl.to(frame, { autoAlpha: 1, ease: "power1.out", duration: d * 0.45 }, t + d * 0.55);
-    return d;
+    return { d, reveal: t + d * 0.5 };
+  },
+
+  // A render sequence plays as you scroll, starting from a still on the previous
+  // slide (Stride cover: the cane). The rest of that slide clears first, the
+  // sequence fades out around `fadeAt` (a Blender frame number), then this
+  // slide fades in. You're in control: stopping leaves it where it is.
+  scrub(tl, i, t) {
+    const d = SETTINGS.scrubVH;
+    const o = SLIDES[i].scrub, prev = i - 1;
+    const p = makeSequence(o.sequence, prev, o.over);
+    if (!p) return TRANSITIONS.fade(tl, i, t);
+    const still = SLIDES[prev].layerEls[o.over];
+    const PLAY = 0.86;                                  // share of the scroll the sequence takes
+    const fadeEnd = p.at(o.fadeAt) * PLAY;              // gone by `fadeAt`…
+    const fadeStart = fadeEnd - 0.1;                    // …fading over the frames before it
+    const state = { f: 0 };
+    gsap.set(p.el, { autoAlpha: 0 });
+
+    tl.set(p.el, { autoAlpha: 1 }, t);                  // the canvas takes over from the still
+    tl.set(still, { autoAlpha: 0 }, t);
+    tl.to(imgs[prev], { autoAlpha: 0, ease: "power1.in", duration: d * 0.1 }, t);   // the text clears first
+    tl.to(state, { f: p.n - 1, ease: "none", duration: d * PLAY, onUpdate: () => p.draw(state.f) }, t);
+    tl.to(p.el, { autoAlpha: 0, ease: "power1.in", duration: d * (fadeEnd - fadeStart) }, t + d * fadeStart);
+    tl.set(strip, { yPercent: -(i / N) * 100 }, t + d * fadeEnd);
+    tl.set(frame, { autoAlpha: 0 }, t + d * fadeEnd);
+    tl.to(frame, { autoAlpha: 1, ease: "power1.out", duration: d * (1 - fadeEnd) }, t + d * fadeEnd);
+    return { d, reveal: t + d * fadeEnd, free: [t, t + d * fadeStart] };
+  },
+
+  // The page moves up with the product still assembled; then its render
+  // sequences play side by side, exploding it, hand over to the sharp stills
+  // from Figma, and the labels draw in. Short, so one wheel notch plays it all.
+  explode(tl, i, t) {
+    const d = SETTINGS.explodeVH;
+    const s = SLIDES[i];
+    const PLAY = [0.24, 0.8];                           // when the sequences play (share of d)
+    const play = d * (PLAY[1] - PLAY[0]);
+
+    tl.to(strip, { yPercent: -(i / N) * 100, ease: "power2.inOut", duration: d * 0.32 }, t);
+
+    const centres = [];
+    s.explode.forEach(({ sequence, over, fit }) => {
+      const p = makeSequence(sequence, i, over);
+      const still = s.layerEls[over];
+      if (!p) return;
+      if (fit) {
+        // Pull back from the sequence's own camera to the still's framing as it explodes.
+        const canvas = p.el.firstChild;
+        gsap.set(canvas, { transformOrigin: "0 0" });
+        tl.fromTo(canvas, { scale: 1, xPercent: 0, yPercent: 0 },
+                          { scale: fit[0], xPercent: fit[1] * 100, yPercent: fit[2] * 100, ease: "power2.inOut", duration: play, immediateRender: false }, t + d * PLAY[0]);
+      }
+      const r = s.fig.layers[over].rect;
+      centres.push(r[0] + r[2] / 2);
+      const state = { f: 0 };
+      gsap.set(still, { autoAlpha: 0 });
+      tl.to(state, { f: p.n - 1, ease: "power1.inOut", duration: play, onUpdate: () => p.draw(state.f) }, t + d * PLAY[0]);
+      // A small kick as it bursts open.
+      tl.fromTo(p.el, { scale: 0.93 }, { scale: 1, ease: "expo.out", duration: play, immediateRender: false }, t + d * PLAY[0]);
+      tl.to(p.el, { autoAlpha: 0, ease: "none", duration: d * 0.08 }, t + d * (PLAY[1] - 0.02));
+      tl.to(still, { autoAlpha: 1, ease: "none", duration: d * 0.08 }, t + d * (PLAY[1] - 0.02));
+    });
+
+    // Labels: leader lines grow out from the product, then the words appear,
+    // nearest the product first.
+    const mid = (r) => r[0] + r[2] / 2;
+    const near = (r) => centres.reduce((a, c) => (Math.abs(c - mid(r)) < Math.abs(a - mid(r)) ? c : a), centres[0] ?? SLIDE_W / 2);
+    Object.entries(s.fig.layers)
+      .filter(([name]) => name.startsWith("label-"))
+      .map(([name, L]) => ({ el: s.layerEls[name], L, gap: Math.abs(mid(L.rect) - near(L.rect)) }))
+      .sort((a, b) => a.gap - b.gap || a.L.rect[1] - b.L.rect[1])
+      .forEach(({ el, L }, k, all) => {
+        const at = t + d * (0.76 + 0.16 * (k / Math.max(1, all.length - 1)));   // after the hand-off to the stills
+        const leftOfProduct = mid(L.rect) < near(L.rect);
+        if (L.type === "TEXT") {
+          gsap.set(el, { autoAlpha: 0 });
+          tl.fromTo(el, { autoAlpha: 0, x: leftOfProduct ? 10 : -10 },
+                        { autoAlpha: 1, x: 0, ease: "power2.out", duration: d * 0.12, immediateRender: false }, at + d * 0.04);
+        } else {
+          const hidden = leftOfProduct ? "inset(0% 0% 0% 100%)" : "inset(0% 100% 0% 0%)";   // grows out from the product
+          gsap.set(el, { clipPath: hidden });
+          tl.fromTo(el, { clipPath: hidden },
+                        { clipPath: "inset(0% 0% 0% 0%)", ease: "power2.out", duration: d * 0.1, immediateRender: false }, at);
+        }
+      });
+    return { d, reveal: t };
+  },
+};
+
+/* ── Layer animations as a slide arrives (and leaves) ──
+ *  from = when the slide first shows, to = a little way into its hold,
+ *  leave = { t, d } of the transition out of it (if any).                    */
+const ANIMATIONS = {
+
+  // Stride 2: the tick wheel in the corner swings up into place around its
+  // centre, and keeps turning as the slide leaves.
+  wheel(tl, s, from, to, leave) {
+    const el = s.layerEls?.wheel, L = s.fig.layers?.wheel;
+    if (!el) return;
+    const [x, y, w, h] = L.rect, [px, py] = L.pivot || [x + w, y + h];
+    gsap.set(el, { transformOrigin: `${((px - x) / w) * 100}% ${((py - y) / h) * 100}%`, rotation: -100 });
+    tl.fromTo(el, { rotation: -100 }, { rotation: 0, ease: "power3.out", duration: to - from, immediateRender: false }, from);
+    if (leave) tl.to(el, { rotation: 45, ease: "power1.in", duration: leave.d * 0.6 }, leave.t);
+  },
+
+  // Solus 2: the sole render drifts up into place from the lower right, faster
+  // than the page (parallax), and keeps rising as the slide leaves.
+  drift(tl, s, from, to, leave) {
+    const el = s.layerEls?.render;
+    if (!el) return;
+    const start = { xPercent: 14, yPercent: 32, rotation: -7, scale: 1.12 };
+    gsap.set(el, { transformOrigin: "60% 60%", ...start });
+    tl.fromTo(el, start, { xPercent: 0, yPercent: 0, rotation: 0, scale: 1, ease: "power3.out", duration: to - from, immediateRender: false }, from);
+    if (leave) tl.to(el, { yPercent: -28, xPercent: -4, rotation: 3, ease: "power1.in", duration: leave.d * 0.8 }, leave.t);
   },
 };
 
 function buildStage() {
   imgs.forEach((img) => strip.appendChild(img));
   strip.style.height = `calc(var(--frame-h) * ${N})`;
+  buildLayers();
   fitFrame();
   window.addEventListener("resize", fitFrame);
 
   // One timeline for the whole site, measured in vh of scroll.
   const tl = gsap.timeline({ defaults: { overwrite: false } });
-  const arrive = [];       // arrive[i] = { t, d }: when the transition INTO slide i starts, and how long it is
+  const arrive = [];       // arrive[i] = { t, d, reveal }: the transition INTO slide i
   let t = 0;
   SLIDES.forEach((s, i) => {
     if (i > 0) {
       const type = TRANSITIONS[s.transition] ? s.transition : "slide";
       if (s.transition && !TRANSITIONS[s.transition])
         console.warn(`[v2] Unknown transition "${s.transition}" on slide ${i + 1} — using "slide".`);
-      const d = TRANSITIONS[type](tl, i, t);
-      arrive[i] = { t, d };
+      const { d, reveal, free: f } = TRANSITIONS[type](tl, i, t);
+      arrive[i] = { t, d, reveal };
+      if (f) free.push(f);
       // Glitch as the slide lands (only when scrolling forwards).
       if (s.glitch) tl.call(() => { if (st && st.direction > 0) glitchBurst(i); }, null, t + d * (type === "wipe" ? 0.62 : 0.9));
       t += d;
@@ -267,6 +530,17 @@ function buildStage() {
     t += hold;
   });
   total = t;
+
+  // Layer animations, now that every transition's timing is known.
+  SLIDES.forEach((s, i) => {
+    if (!s.animate) return;
+    const anim = ANIMATIONS[s.animate];
+    if (!anim) { console.warn(`[v2] Unknown animate "${s.animate}" on slide ${i + 1}.`); return; }
+    const from = arrive[i] ? arrive[i].reveal : 0;
+    const to = stops[i].start + (stops[i].end - stops[i].start) * 0.7;     // done just as you land
+    anim(tl, s, from, Math.max(to, from + 1), arrive[i + 1]);
+  });
+
   buildContents(tl, arrive);
   tl.set({}, {}, total);   // make the timeline exactly `total` long
 
@@ -404,21 +678,26 @@ function buildContents(tl, arrive) {
 }
 
 /* ── Where to settle when scrolling stops (returns progress 0–1) ──
- *  • Stopped on a slide (inside its hold)?  Stay exactly where you are.
+ *  • Stopped on a slide (inside its hold), or partway through a render
+ *    sequence you're scrubbing?  Stay exactly where you are.
  *  • Stopped between two slides?  Finish the change in the direction you
- *    were scrolling, once you're past SETTINGS.commitAt of the way. So a
+ *    were scrolling, once you're SETTINGS.commitVH into it. So a
  *    half swipe carries on to the next page instead of bouncing back.
  *  (GSAP's default snap projects momentum, which can skip whole slides.) */
 function snapTarget(progress, direction) {
   const time = progress * total;
+  if (free.some(([a, b]) => time > a && time < b)) return progress;   // inside a scroll-played sequence: stay put
   const k = stops.findIndex((s, i) => i + 1 < stops.length && time > s.end && time < stops[i + 1].start);
   if (k < 0) return progress;                                  // on a slide: don't move
 
   const from = stops[k], to = stops[k + 1];
-  const frac = (time - from.end) / (to.start - from.end);      // 0 → 1 through the change
-  const forward = direction >= 0 ? frac > SETTINGS.commitAt : frac > 1 - SETTINGS.commitAt;
+  // After a scroll-played sequence, "back" means the end of the sequence, not the slide before it.
+  const scrubbed = free.find(([a, b]) => a >= from.end && b <= to.start);
+  const back = scrubbed ? scrubbed[1] : from.end;
+  const into = direction >= 0 ? time - back : to.start - time;        // vh into the change, in your direction
+  const forward = direction >= 0 ? into > SETTINGS.commitVH : into < SETTINGS.commitVH;
   const inset = (s) => Math.min(SETTINGS.landInVH, (s.end - s.start) / 2);
-  return (forward ? to.start + inset(to) : from.end - inset(from)) / total;
+  return (forward ? to.start + inset(to) : scrubbed ? back : from.end - inset(from)) / total;
 }
 
 /* ── On every scroll: which slide are we on? progress bar, nav, preloading ── */

@@ -22,18 +22,15 @@
 
   <!-- ══════════════════════════════════════════════════════════
        LAYER 1 — STAGE (fixed, never scrolls)
-       #frame is the 1190 × 842 slide window, fitted to the screen.
+       #frame is the 1302 × 842 slide window, scaled to fill the screen.
        #strip holds every slide image stacked vertically; scrolling
-       moves the strip up inside the frame (see main.js).
-       The side panels fill the space left and right of the frame —
-       empty for now, ready for your patterns (styles.css → SIDES).
+       moves the strip up inside the frame (see main.js). Animated
+       layers (render sequences, the wheel, labels) live in the strip too.
        ══════════════════════════════════════════════════════════ -->
   <div id="stage">
-    <div class="side side-left"  aria-hidden="true"></div>
     <div id="frame">
       <div id="strip"></div>
     </div>
-    <div class="side side-right" aria-hidden="true"></div>
   </div>
 
 
@@ -82,6 +79,8 @@
        everything else is local, so you can just double-click this file. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script src="slides/manifest.js"></script>       <!-- written by tools/figma_export.py -->
+  <script src="sequences/sequences.js"></script>   <!-- written by tools/build_sequences.py -->
   <script src="main.js"></script>
 </body>
 </html>
