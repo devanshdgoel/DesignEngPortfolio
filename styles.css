@@ -15,7 +15,7 @@
   --ui-dim:    rgba(200, 210, 220, 0.4);
   --font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
-  --overlay-opacity:    1;               /* the overlay image is already 5% opaque; lower this to fade it further */
+  --overlay-opacity:    0.6;             /* the overlay image is 5% opaque: 0.6 shows it at 3%; lower this to fade it further */
   --overlay-blend:      screen;
   --transition-opacity: 0.97;            /* orange wipe panel */
 
@@ -130,8 +130,14 @@ img { display: block; user-select: none; -webkit-user-drag: none; }
   z-index: 2;
   pointer-events: none;
   mix-blend-mode: screen;
+  transition: opacity 0.9s ease;        /* fades back in when scrolling stops… */
 }
+body.is-scrolling #pcb { opacity: 0; transition-duration: 0.35s; }   /* …and out while you scroll */
 body.flow #pcb { display: none; }
+
+/* Lenis (smooth scroll) */
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
 
 #glitch {
   position: fixed;

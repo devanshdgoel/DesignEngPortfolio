@@ -42,7 +42,10 @@ const SETTINGS = {
   commitVH:  1.5,    // scroll (vh) into a change after which it always completes (less than one wheel notch)
   landInVH:  6,      // after an auto-finish, land this far inside the new slide's hold
   snapDuration: [0.9, 1.4],    // seconds an auto-finished change takes (min, max) — higher = slower, easier to follow
-  scrub:     0.4,    // smoothing (seconds): the page eases after the scrollbar instead of jumping with it (higher = laggier)
+  scrub:     0.2,    // smoothing (seconds): the page eases after the scrollbar instead of jumping with it (higher = laggier)
+  smoothScroll: true,  // Lenis: the wheel glides instead of jumping a notch at a time (desktop only)
+  smoothLerp:   0.09,  // how much it glides: lower = smoother/floatier, higher = more direct (0–1)
+  calmMs:       180,   // ms after the last scroll before "scrolling" ends: the sparks fade back in
 
   // ── Glitch (part 4) ──
   glitch:          true,     // glitch bursts on slides marked glitch: true
@@ -133,7 +136,7 @@ const SLIDES = [
            // Structures: the text fades, the sole render (frame 0001 is the still) plays as you
            // scroll; its last frames are empty, then this slide fades in.
            scrub: { sequence: "solus", area: [0, 0, 1302, 842], replaces: "render", fadeAt: 50,
-                    vh: 140, lead: 0.14, fadeInVH: 45 } },
+                    vh: 105, lead: 0.14, fadeInVH: 45 } },
   { n: 13, project: "solus" },                                         // Generative design
   { n: 14, project: "solus" },                                         // Design language
 
@@ -878,7 +881,8 @@ function setActiveNav(project) {
 function goToSlide(i) {
   const top = FLOW ? spacer.querySelectorAll("img")[i].offsetTop
                    : stops[i].mid * vh();
-  window.scrollTo({ top, behavior: REDUCED ? "auto" : "smooth" });
+  if (lenis) lenis.scrollTo(top, { duration: 1.6 });
+  else window.scrollTo({ top, behavior: REDUCED ? "auto" : "smooth" });
 }
 
 
@@ -904,6 +908,7 @@ function sizeGlitchCanvas() {
 
 function glitchBurst(i) {
   if (!SETTINGS.glitch || FLOW) return;
+  if (scrolling) { pendingGlitch = i; return; }     // keep scrolling smooth: it plays when you stop
   glitchSlide = i;
   glitchLeft = SETTINGS.glitchFrames;
   if (!glitchOn) { glitchOn = true; requestAnimationFrame(drawGlitch); }
@@ -1107,7 +1112,7 @@ function traceNear(x, y, not) {
 function spawnSpark() {
   const P = SETTINGS.pcb;
   const pool = traces.filter((t) => t.len > 70);
-  if (!pool.length || sparks.length >= P.maxSparks || document.hidden) return;
+  if (!pool.length || sparks.length >= P.maxSparks || document.hidden || scrolling) return;
   const first = newSpark(pick(pool));
   sparks.push(first);
   // Sometimes a burst: a second or third spark on a trace close to the first.
@@ -1229,6 +1234,35 @@ function buildPCB() {
 
 
 /* ═══════════════════════════════════════════════════════════════════════
+ *  SMOOTH SCROLL + "while scrolling"
+ *  Lenis eases the wheel, so the page glides instead of stepping a notch at a time
+ *  (touch scrolling stays native). While you scroll, the sparks fade out and no new
+ *  ones start, and a cover's glitch waits until you stop: the browser only has
+ *  the slides to draw, so scrolling stays smooth.
+ * ═══════════════════════════════════════════════════════════════════════ */
+let lenis = null, scrolling = false, pendingGlitch = -1, calmTimer;
+
+function startSmoothScroll() {
+  if (SETTINGS.smoothScroll && !REDUCED && window.Lenis) {
+    lenis = new Lenis({ lerp: SETTINGS.smoothLerp, wheelMultiplier: 1 });
+    lenis.on("scroll", ScrollTrigger.update);
+    gsap.ticker.add((time) => lenis.raf(time * 1000));
+    gsap.ticker.lagSmoothing(0);
+  }
+  window.addEventListener("scroll", () => {
+    if (!scrolling) { scrolling = true; document.body.classList.add("is-scrolling"); }
+    clearTimeout(calmTimer);
+    calmTimer = setTimeout(() => {
+      scrolling = false;
+      document.body.classList.remove("is-scrolling");
+      if (pendingGlitch === current) glitchBurst(pendingGlitch);
+      pendingGlitch = -1;
+    }, SETTINGS.calmMs);
+  }, { passive: true });
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════════
  *  6. FLOW MODE — mobile + reduced motion
  *  Slides stacked full-width in the page, orange bars between projects.
  * ═══════════════════════════════════════════════════════════════════════ */
@@ -1263,7 +1297,7 @@ function buildFlow() {
  * ═══════════════════════════════════════════════════════════════════════ */
 buildNav();
 if (FLOW) buildFlow();
-else      buildStage();
+else      { startSmoothScroll(); buildStage(); }
 
 // Crossing the mobile breakpoint switches layouts — simplest is a reload.
 let resizeTimer;
