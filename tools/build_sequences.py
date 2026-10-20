@@ -15,23 +15,31 @@ Needs:  pip install pillow numpy
 import os, json, sys
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFilter
 
 SRC = r"C:/Users/devan/Desktop/Design/PortfolioWebsiteOld/Stride"
+here = os.path.dirname(os.path.abspath(__file__))
 SEQUENCES = {
-    # name:      (folder,     first, last, step)
+    # name:      (folder,     first, last, step[, scale])   folder: inside SRC, or a full path
     "cover3":   ("Cover3",    160,   350,  2),   # Stride cover → base close-up (fades out ~347)
     "explode1": ("Explode1",  40,    190,  2),   # bottom of the product exploding (ends on the Figma still)
     "explode2": ("Explode2",  205,   245,  1),   # top of the product exploding (Figma still = frame 0245;
                                                  #   before 205 the camera is still on the base)
+    # Solus Structures: full-slide frames (1302 x 842, the slide's own size), so no downscaling.
+    # The PNGs stay out of git (.gitignore): only sequences/solus/ is published.
+    "solus":    (os.path.join(here, "..", "sequences", "solus_structures"), 1, 50, 1, 1.0),
+    # Calyx cover → Concept development: full-slide frames too (frame 0000 is the cover still).
+    "calyx":    (os.path.join(here, "..", "sequences", "calyx_cover"), 0, 85, 1, 1.0),
 }
 SCALE   = 0.5      # 3840 → 1920 px wide render
 QUALITY = 78       # WebP quality
 ALPHA_FLOOR = 14   # alpha below this is dropped: the renders carry a faint haze that is
                    # invisible on the dark slides but stops the frames from being cropped
 PAD     = 8        # px (source) around the product's bounding box
+FEATHER = {"calyx": 40}   # px: these renders have a soft floor shadow, so instead of the hard
+                          # ALPHA_FLOOR cut, alpha ramps in softly and fades out towards the
+                          # frame's edges (no straight lines where the shadow is cut off)
 
-here = os.path.dirname(os.path.abspath(__file__))
 out_root = os.path.join(here, "..", "sequences")
 
 
@@ -48,17 +56,31 @@ def alpha_box(path):
 
 
 def convert(args):
-    src, dst, box, size = args
+    src, dst, box, size, feather = args
     im = Image.open(src).crop(box)
     a = np.asarray(im.getchannel("A")).copy()
-    a[a < ALPHA_FLOOR] = 0
+    if feather:
+        # The shadow is noisy: smooth it (the product itself, a > 100, stays sharp), and
+        # make its colour plain black, so it compresses well.
+        solid = np.asarray(Image.fromarray(((a > 100) * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(7))) > 0
+        soft = np.asarray(Image.fromarray(a).filter(ImageFilter.GaussianBlur(4))).astype(float)
+        f = np.where(solid, a, soft)                  # (keeps the product's anti-aliased edge)
+        f *= np.clip((f - 6) / 14, 0, 1)
+        rgb = np.asarray(im.convert("RGB")).copy()
+        rgb[~solid] = 0
+        im = Image.fromarray(rgb)
+        h, w = a.shape
+        ramp = lambda n: np.clip(np.minimum(np.arange(n), np.arange(n)[::-1]) / feather, 0, 1)
+        a = (f * ramp(h)[:, None] * ramp(w)[None, :]).round().astype(np.uint8)
+    else:
+        a[a < ALPHA_FLOOR] = 0
     im.putalpha(Image.fromarray(a))
     im = im.resize(size, Image.LANCZOS)
     im.save(dst, quality=QUALITY, alpha_quality=80, method=5)
     return os.path.getsize(dst)
 
 
-def build(name, folder, first, last, step, pool):
+def build(name, folder, first, last, step, pool, scale=SCALE):
     frames = list(range(first, last + 1, step))
     paths = [frame_path(folder, n) for n in frames]
     boxes = [b for b in pool.map(alpha_box, paths, chunksize=8) if b]
@@ -67,14 +89,14 @@ def build(name, folder, first, last, step, pool):
     y0 = max(0, min(b[1] for b in boxes) - PAD)
     x1 = min(W, max(b[2] for b in boxes) + PAD)
     y1 = min(H, max(b[3] for b in boxes) + PAD)
-    size = (round((x1 - x0) * SCALE), round((y1 - y0) * SCALE))
+    size = (round((x1 - x0) * scale), round((y1 - y0) * scale))
 
     out = os.path.join(out_root, name)
     os.makedirs(out, exist_ok=True)
     for f in os.listdir(out):
         if f.endswith(".webp"):
             os.remove(os.path.join(out, f))
-    jobs = [(p, os.path.join(out, f"{k:04d}.webp"), (x0, y0, x1, y1), size) for k, p in enumerate(paths)]
+    jobs = [(p, os.path.join(out, f"{k:04d}.webp"), (x0, y0, x1, y1), size, FEATHER.get(name)) for k, p in enumerate(paths)]
     total = sum(pool.map(convert, jobs, chunksize=4))
 
     return {
@@ -97,7 +119,7 @@ if __name__ == "__main__":
     with ProcessPoolExecutor(max_workers=4) as pool:      # 4K RGBA frames are ~33 MB each in memory
         for name, spec in SEQUENCES.items():
             if not only or name in only:
-                metas[name], total = build(name, *spec, pool)
+                metas[name], total = build(name, *spec[:4], pool, *spec[4:])
                 m = metas[name]
                 print(f"  {name:9s} {m['frames']:4d} frames  {m['size'][0]}x{m['size'][1]}  {total / 1e6:6.1f} MB")
     with open(index, "w", encoding="utf-8") as fh:

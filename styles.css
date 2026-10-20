@@ -19,6 +19,8 @@
   --overlay-blend:      screen;
   --transition-opacity: 0.97;            /* orange wipe panel */
 
+  --bar-h: 3.5rem;                        /* height of the top bar; the slides start below it */
+
   /* Written by main.js: size of the slide window on screen */
   --frame-w: 100vw;
   --frame-h: 100vh;
@@ -46,6 +48,8 @@ img { display: block; user-select: none; -webkit-user-drag: none; }
   background: var(--bg) url("assets/site-background.png") center / cover;
 }
 
+/* The stage fills the screen (full-screen backdrops run under the top bar);
+   the slide itself is centred in the space below the bar. */
 #stage {
   position: fixed;
   inset: 0;
@@ -53,9 +57,26 @@ img { display: block; user-select: none; -webkit-user-drag: none; }
   display: flex;
   align-items: center;
   justify-content: center;
+  padding-top: var(--bar-h);
   overflow: hidden;
   pointer-events: none;
 }
+
+/* Full-screen background images behind the slide (main.js → backdrops) */
+#backdrops {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.backdrop {                             /* one per slide: full screen, moves/fades with its slide */
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  visibility: hidden;
+  will-change: transform, opacity;
+}
+.backdrop img { position: absolute; max-width: none; }   /* sized and placed by main.js */
+#strip img.fg { background: none; }    /* slide with its background removed (shown over a backdrop) */
 
 #frame {
   position: relative;
@@ -168,20 +189,30 @@ body.flow #pcb { display: none; }
 /* ============================================================
    UI — nav, progress bar, scroll hint
    ============================================================ */
-/* Nav bar: a dark glass pill, top right. Each button: "01 STRIDE". */
-#project-nav {
+/* Top bar: full width, translucent dark glass. Name on the left, nav on the right. */
+#topbar {
   position: fixed;
-  top: 1.2rem;
-  right: 1.4rem;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: var(--bar-h);
   z-index: 10;
   display: flex;
-  gap: 0.2rem;
-  padding: 0.3rem;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 999px;
-  background: rgba(16, 13, 13, 0.62);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 clamp(1rem, 3vw, 2.5rem);
+  background: rgba(16, 13, 13, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* Nav: plain links "01 STRIDE", the current project underlined in orange. */
+#project-nav {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  gap: clamp(0.5rem, 1.6vw, 1.6rem);
 }
 .nav-btn {
   display: flex;
@@ -195,21 +226,30 @@ body.flow #pcb { display: none; }
   color: rgba(235, 238, 242, 0.72);
   background: none;
   border: none;
-  border-radius: 999px;
-  padding: 0.55rem 0.95rem;
+  padding: 0 0.15rem;
+  align-items: center;
+  position: relative;
   cursor: pointer;
-  transition: color 0.25s, background-color 0.25s;
+  transition: color 0.25s;
+}
+.nav-btn::after {                       /* underline for the current project */
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transition: transform 0.3s;
 }
 .nav-num { color: var(--accent); font-size: 0.85em; }
-.nav-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.06); }
-.nav-btn.is-active { color: #fff; background: rgba(235, 70, 4, 0.16); box-shadow: inset 0 0 0 1px rgba(235, 70, 4, 0.55); }
+.nav-btn:hover { color: #fff; }
+.nav-btn.is-active { color: #fff; }
+.nav-btn.is-active::after { transform: scaleX(1); }
 
 /* Name, top left — back to the start */
 #brand {
-  position: fixed;
-  top: 1.2rem;
-  left: 1.4rem;
-  z-index: 10;
   font-family: var(--font-mono);
   font-size: 0.74rem;
   font-weight: 500;
@@ -345,18 +385,20 @@ body.flow #morph,
 body.flow #brand,
 body.flow #scroll-hint { display: none; }
 
-body.flow #scroll-root { pointer-events: auto; }
+body.flow #scroll-root { pointer-events: auto; padding-top: var(--bar-h); }
 body.flow #scroll-root img { width: 100%; height: auto; }
 
+body.flow #topbar {
+  height: auto;
+  min-height: var(--bar-h);
+  justify-content: center;
+  padding: 0.4rem 0.5rem;
+  background: rgba(16, 13, 13, 0.85);
+}
 body.flow #project-nav {
-  left: 0; right: 0; top: 0;
   justify-content: center;
   flex-wrap: wrap;
   gap: 0;
-  padding: 0.4rem 0.5rem;
-  border: none;
-  border-radius: 0;
-  background: rgba(16, 13, 13, 0.85);
 }
 body.flow .nav-btn { padding: 0.45rem 0.55rem; font-size: 0.6rem; letter-spacing: 0.1em; }
 

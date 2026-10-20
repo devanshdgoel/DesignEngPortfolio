@@ -68,5 +68,51 @@ window.SEQUENCES = {
    904
   ],
   "dir": "sequences/explode2/"
+ },
+ "solus": {
+  "frames": 50,
+  "sourceFrames": [
+   1,
+   50,
+   1
+  ],
+  "render": [
+   1302,
+   842
+  ],
+  "crop": [
+   0.0,
+   0.40736342042755347,
+   1.0,
+   0.5926365795724465
+  ],
+  "size": [
+   1302,
+   499
+  ],
+  "dir": "sequences/solus/"
+ },
+ "calyx": {
+  "frames": 86,
+  "sourceFrames": [
+   0,
+   85,
+   1
+  ],
+  "render": [
+   1302,
+   842
+  ],
+  "crop": [
+   0.0,
+   0.0,
+   1.0,
+   1.0
+  ],
+  "size": [
+   1302,
+   842
+  ],
+  "dir": "sequences/calyx/"
  }
 };

@@ -23,24 +23,26 @@
  *  1. SETTINGS + PROJECTS
  * ═══════════════════════════════════════════════════════════════════════ */
 const SETTINGS = {
-  fit:       "cover",  // "cover": slides fill the whole screen (a little is trimmed off the edges to fit)
-                       // "contain": the whole slide is always visible, with gaps beside it
-  maxTrim:   [0.06, 0.08],   // "cover" trims at most this much of the slide per side [left/right, top/bottom],
-                             // so text near the edges stays on screen; on unusually wide or tall windows
-                             // the rest is a thin margin in the slide background colour
+  fit:       "contain",  // "contain": the whole slide is visible below the top bar, inside `margin` (nothing cut off)
+                         // "cover": slides fill the area below the bar (up to maxTrim is trimmed off the edges)
+  maxTrim:   [0.06, 0.08],   // "cover" only: most trimmed per side [left/right, top/bottom]
+  margin:    [0.02, 0.04],   // space around the slide, as a share of the area below the top bar [left/right, top/bottom]
+                             // (background photos still fill the whole screen: see buildBackdrops)
 
   // ── Pacing ──
-  holdVH:    12,     // scroll on each slide where nothing moves (was 60)
-  travelVH:  45,     // scroll to move to the next slide
+  holdVH:    16,     // scroll on each slide where nothing moves (was 60)
+  travelVH:  60,     // scroll to change to the next slide (the "beat": moves up and fades out, the next moves up and fades in)
+  beatShift: 14,     // how far (% of the slide's height) a slide moves up as it fades out / in — 0 = pure fade
   wipeVH:    65,     // scroll for an orange project wipe
   fadeVH:    48,     // scroll for a fade-through transition
   scrubVH:   170,    // scroll for a render sequence played by scrolling (Stride 1 → 2)
-  explodeVH: 80,     // scroll for the explode (Stride 3 → 4) — short, so it hits hard
-  snap:      true,   // finish a page change automatically when scrolling stops
+  explodeVH: 260,    // scroll for the explode (Stride 3 → 4) — higher = slower
+  scrubShrink: 0.8,  // the Stride cover render scales down to this as it turns, so it stays on screen
+  snap:      false,  // finish a page change automatically when scrolling stops ("sticky" scrolling)
   commitVH:  1.5,    // scroll (vh) into a change after which it always completes (less than one wheel notch)
   landInVH:  6,      // after an auto-finish, land this far inside the new slide's hold
   snapDuration: [0.9, 1.4],    // seconds an auto-finished change takes (min, max) — higher = slower, easier to follow
-  scrub:     1,      // smoothing (seconds): the page eases after the scrollbar instead of jumping with it
+  scrub:     0.4,    // smoothing (seconds): the page eases after the scrollbar instead of jumping with it (higher = laggier)
 
   // ── Glitch (part 4) ──
   glitch:          true,     // glitch bursts on slides marked glitch: true
@@ -84,7 +86,8 @@ const PROJECTS = {
  *  n           the slide number in slides/manifest.js (NN.webp). The orange
  *              screens in Figma are left out by the export: "wipe" replaces them.
  *  transition  how we ARRIVE at this slide:
- *                "slide" (default)  the page moves up
+ *                "beat" (default)   the slide fades out drifting up, the next fades in
+ *                "slide"            the page moves up
  *                "wipe"             orange project screen with the label
  *                "fade"             fades out, then the next fades in
  *                "scrub"            a render sequence plays as you scroll, starting
@@ -99,6 +102,7 @@ const PROJECTS = {
  *  settle      true → tiny zoom-out as the slide lands (used on covers)
  *  glitch      true → short glitch burst as the slide lands
  *  hold        optional: this slide's own hold length (vh)
+ *  scale       optional: show the slide smaller than the others (e.g. 0.88), for more border
  *
  *  Layer and sequence names come from LIFT in tools/figma_export.py and
  *  SEQUENCES in tools/build_sequences.py.
@@ -112,18 +116,24 @@ const SLIDES = [
   // ── 01 Stride ──
   { n: 4,  project: "stride", transition: "wipe", settle: true, glitch: true },          // Stride cover
   { n: 5,  project: "stride", transition: "scrub",                                       // Mechanical development
-           scrub: { sequence: "cover3", over: "cane", fadeAt: 347 }, animate: "wheel" },
+           scrub: { sequence: "cover3", over: "cane", fadeAt: 347, shrink: SETTINGS.scrubShrink,
+                    fadeInVH: 60 },                                    // Mechanical development fades in slowly
+           animate: "wheel" },
   { n: 6,  project: "stride" },                                        // Prototyping / Electrical
   { n: 7,  project: "stride", transition: "explode",                   // Components
            explode: [{ sequence: "explode2", over: "top" },                  // the still is frame 0245
-                     { sequence: "explode1", over: "bottom", fit: [0.77, 0.115, 0.119] }] },   // the still is a wider shot
+                     { sequence: "explode1", over: "bottom", fit: [0.77, 0.115, 0.119], until: 150 }] },   // the still is a wider shot; stops at frame 0150 (matches the still)
   { n: 8,  project: "stride" },                                        // CMF and packaging
   { n: 9,  project: "stride", transition: "fade" },                    // User validation (full-bleed photo)
 
   // ── 02 SOLUS ──
   { n: 10, project: "solus", transition: "wipe", settle: true, glitch: true },
-  { n: 11, project: "solus", animate: "drift" },                       // Structures
-  { n: 12, project: "solus" },                                         // Concept and prototyping
+  { n: 11, project: "solus", animate: "drift", hold: 55 },             // Structures (longer hold: you scroll a while before it fades)
+  { n: 12, project: "solus", transition: "scrub",                      // Concept and prototyping
+           // Structures: the text fades, the sole render (frame 0001 is the still) plays as you
+           // scroll; its last frames are empty, then this slide fades in.
+           scrub: { sequence: "solus", area: [0, 0, 1302, 842], replaces: "render", fadeAt: 50,
+                    vh: 140, lead: 0.14, fadeInVH: 45 } },
   { n: 13, project: "solus" },                                         // Generative design
   { n: 14, project: "solus" },                                         // Design language
 
@@ -134,11 +144,16 @@ const SLIDES = [
   { n: 18, project: "flexicook" },                                     // Final design
 
   // ── 04 Calyx ──
-  { n: 19, project: "calyx", transition: "wipe", settle: true, glitch: true },
-  { n: 20, project: "calyx" },                                         // Concept development
+  { n: 19, project: "calyx", transition: "wipe", settle: true, glitch: true, hold: 45,
+           bg: "slides/19-bg.webp" },                                  // the text only: the render is the canvas (frame 0)
+  { n: 20, project: "calyx", transition: "scrub",                      // Concept development
+           // Cover: the text fades, the device render plays as you scroll and leaves the
+           // frame (its last frames are empty), then this slide fades in.
+           scrub: { sequence: "calyx", area: [-45, 0, 1302, 842], replaces: "still", fadeAt: 78,
+                    fadeOut: 0.2, vh: 230, lead: 0.12, fadeInVH: 60 } },   // (fades as it reaches the render's edge, ~frame 61)
   { n: 21, project: "calyx" },                                         // Product analysis
   { n: 22, project: "calyx" },                                         // Prototyping
-  { n: 23, project: "calyx" },                                         // Device body
+  { n: 23, project: "calyx", scale: 0.88 },                            // Device body (shown a little smaller: more border)
 
   // ── Outro ──
   { n: 24, project: "outro", transition: "fade", hold: 40 },           // Thank you
@@ -169,6 +184,7 @@ gsap.registerPlugin(ScrollTrigger);
 
 const FIGMA = window.FIGMA;                        // slides/manifest.js
 const SEQ   = window.SEQUENCES || {};               // sequences/sequences.js
+const BACKDROPS = window.BACKDROPS || {};           // slides/backdrops.js
 const SLIDE_W = FIGMA.slideW, SLIDE_H = FIGMA.slideH;   // Figma slide size (pt)
 const REDUCED = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const MOBILE  = window.innerWidth < SETTINGS.mobileBreakpoint;
@@ -200,15 +216,24 @@ SLIDES.forEach((s) => {
   s.fig = FIGMA.slides[s.n - 1];
   if (!s.fig) throw new Error(`[v2] Slide ${s.n} isn't in slides/manifest.js — re-run tools/figma_export.py?`);
   s.src = s.fig.src;
+  if (!FLOW) s.backdrop = BACKDROPS[s.n];   // full-screen background photo (see buildBackdrops)
 });
 
 // One <img> per slide. They load a few at a time (see loadAround).
 // Slides with animated layers show their background here; the layers go on top.
+// Slides with a full-screen backdrop show only what sits on the photo.
 const imgs = SLIDES.map((s) => {
   const img = new Image();
   img.alt = "";
   img.decoding = "async";
-  img.dataset.src = (!FLOW && s.fig.bg) || s.src;
+  img.dataset.src = s.backdrop?.fg || (!FLOW && (s.bg || s.fig.bg)) || s.src;
+  if (s.backdrop) img.classList.add("fg");
+  if (s.scale && !FLOW) {
+    // Shown a little smaller inside its window (more border); the rest is slide background.
+    const p = (1 - s.scale) / 2;
+    Object.assign(img.style, { objectFit: "contain", boxSizing: "border-box",
+                               padding: `calc(var(--frame-h) * ${p}) ${p * 100}%` });
+  }
   return img;
 });
 
@@ -218,7 +243,7 @@ function loadAround(i) {
   for (let k = i - 1; k <= i + SETTINGS.preload; k++) {
     const s = SLIDES[k];
     if (!s) continue;
-    [imgs[k], ...Object.values(s.layerEls || {})].forEach((img) => {
+    [imgs[k], ...Object.values(s.layerEls || {}), s.backdrop?.img].filter(Boolean).forEach((img) => {
       if (img.dataset.src && !img.getAttribute("src")) img.src = img.dataset.src;
     });
   }
@@ -229,8 +254,11 @@ function loadAround(i) {
 /* ── Fit the slide window to the screen ──
  *  "cover" fills the screen, trimming whatever doesn't fit evenly from both
  *  sides (up to SETTINGS.maxTrim); "contain" shows the whole slide.          */
+let frameH = 0;                  // slide height on screen (px)
 function fitFrame() {
-  const W = window.innerWidth, H = window.innerHeight;
+  const bar = document.getElementById("topbar").offsetHeight;
+  const [mx, my] = SETTINGS.margin;
+  const W = window.innerWidth * (1 - 2 * mx), H = (window.innerHeight - bar) * (1 - 2 * my);
   const contain = Math.min(W / SLIDE_W, H / SLIDE_H);
   const [tx, ty] = SETTINGS.maxTrim;
   const s = SETTINGS.fit === "contain" ? contain
@@ -238,7 +266,68 @@ function fitFrame() {
                                  W / (SLIDE_W * (1 - 2 * tx)), H / (SLIDE_H * (1 - 2 * ty))));
   root.style.setProperty("--frame-w", SLIDE_W * s + "px");
   root.style.setProperty("--frame-h", SLIDE_H * s + "px");
+  frameH = SLIDE_H * s;
+  layoutBackdrops(bar);
   sizeGlitchCanvas();
+}
+
+/* ── Full-screen background photos ──
+ *  The slide sits inside borders below the top bar, but its background photo
+ *  (slides/backdrops.js, by tools/make_backdrops.py) fills the whole screen.
+ *  The photo is drawn at the slide's own scale and position, so it lines up
+ *  with what's on it, and runs on past the slide's edges as far as the photo
+ *  goes; if that isn't far enough, it's enlarged around the slide's centre.
+ *  It fades and moves with its slide (#backdrops follows the frame).          */
+const backdropsEl = document.getElementById("backdrops");
+
+function buildBackdrops(tl, arrive) {
+  const typeOf = (k) => (TRANSITIONS[SLIDES[k].transition] ? SLIDES[k].transition : "beat");
+  // How long the page scrolls for a transition (0 = it fades/wipes instead: switch while hidden).
+  const moves = (k) => (typeOf(k) === "slide" ? arrive[k].d : 0);
+  SLIDES.forEach((s, i) => {
+    const b = s.backdrop;
+    if (!b) return;
+    b.wrap = document.createElement("div");
+    b.wrap.className = "backdrop";
+    b.img = new Image();
+    b.img.alt = "";
+    b.img.decoding = "async";
+    b.img.dataset.src = b.src;
+    b.wrap.appendChild(b.img);
+    backdropsEl.appendChild(b.wrap);
+
+    gsap.set(b.wrap, { autoAlpha: i === 0 ? 1 : 0, yPercent: 0 });
+    if (i > 0) {                                   // arriving
+      const a = arrive[i], d = moves(i);
+      if (d) tl.fromTo(b.wrap, { autoAlpha: 1, yPercent: 100 }, { yPercent: 0, ease: "power2.inOut", duration: d, immediateRender: false }, a.t);
+      else   tl.fromTo(b.wrap, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.01, immediateRender: false }, a.reveal);
+    }
+    const out = arrive[i + 1];                     // leaving
+    if (out) {
+      const d = moves(i + 1);
+      if (d) tl.fromTo(b.wrap, { yPercent: 0 }, { yPercent: -100, ease: "power2.inOut", duration: d, immediateRender: false }, out.t);
+      else   tl.to(b.wrap, { autoAlpha: 0, duration: 0.01 }, out.reveal);
+    }
+  });
+  layoutBackdrops(document.getElementById("topbar").offsetHeight);
+}
+
+function layoutBackdrops(bar) {
+  const W = window.innerWidth, H = window.innerHeight;
+  const s = frameH / SLIDE_H;                       // screen px per Figma point
+  const cx = W / 2, cy = bar + (H - bar) / 2;       // the slide's centre on screen
+  const px = SLIDE_W / 2, py = SLIDE_H / 2;         // ...and in the slide
+  SLIDES.forEach((sl) => {
+    const b = sl.backdrop;
+    if (!b?.img) return;
+    const [bx, by, bw, bh] = b.rect;
+    const k = s * Math.max(1, cx / (s * (px - bx)), (W - cx) / (s * (bx + bw - px)),
+                              cy / (s * (py - by)), (H - cy) / (s * (by + bh - py)));
+    Object.assign(b.img.style, {
+      left: cx - (px - bx) * k + "px", top: cy - (py - by) * k + "px",
+      width: bw * k + "px", height: bh * k + "px",
+    });
+  });
 }
 
 /* ── Put an element on slide i, at [x, y, w, h] in Figma points ──
@@ -275,9 +364,9 @@ function buildLayers() {
  *  A canvas that shows one frame of a Blender render sequence at a time,
  *  placed exactly where the matching still sits in Figma (`over` = that
  *  layer), so its first or last frame lines up with the still.               */
-function makeSequence(name, i, over) {
+function makeSequence(name, i, over, area) {
   const meta = SEQ[name];
-  const L = SLIDES[i].fig.layers?.[over];
+  const L = area ? { rect: area } : SLIDES[i].fig.layers?.[over];     // area: frames the size of the slide
   if (!meta || !L) { console.warn(`[v2] Sequence "${name}" or layer "${over}" missing.`); return null; }
   const clip = L.rect, rect = L.imageRect || L.rect;
 
@@ -345,6 +434,28 @@ function makeSequence(name, i, over) {
  *  shows (for `animate`), and optionally a stretch that isn't snapped.      */
 const TRANSITIONS = {
 
+  // A beat — between scrolling and a slideshow: the slide moves up like a page
+  // and fades out as it goes; the next one comes up from below, fading in as
+  // it rises into place. Each screen reads as its own step.
+  beat(tl, i, t) {
+    const d = SETTINGS.travelVH;
+    const S = SETTINGS.beatShift;                              // % of the slide's height
+    const SB = (S * frameH) / window.innerHeight;              // the same distance for full-screen backdrops
+    const OUT = 0.48, IN = 0.5;                                // out: 0 → OUT, swap, in: IN → 1 (shares of d)
+    // Out: moving from the start, fading a moment later.
+    tl.fromTo(frame, { yPercent: 0 }, { yPercent: -S, ease: "sine.in", duration: d * OUT, immediateRender: false }, t);
+    tl.fromTo(backdropsEl, { yPercent: 0 }, { yPercent: -SB, ease: "sine.in", duration: d * OUT, immediateRender: false }, t);
+    tl.to([frame, backdropsEl], { autoAlpha: 0, ease: "power1.in", duration: d * (OUT - 0.12) }, t + d * 0.12);
+    tl.set(strip, { yPercent: -(i / N) * 100 }, t + d * (OUT + IN) / 2);
+    // In: rising into place, visible early.
+    tl.fromTo(frame, { yPercent: S }, { yPercent: 0, ease: "power2.out", duration: d * (1 - IN), immediateRender: false }, t + d * IN);
+    tl.fromTo(backdropsEl, { yPercent: SB }, { yPercent: 0, ease: "power2.out", duration: d * (1 - IN), immediateRender: false }, t + d * IN);
+    tl.fromTo([frame, backdropsEl], { autoAlpha: 0 }, { autoAlpha: 1, ease: "power1.out", duration: d * 0.35, immediateRender: false }, t + d * IN);
+    if (SLIDES[i].settle)
+      tl.fromTo(frame, { scale: 1.04 }, { scale: 1, ease: "power2.out", duration: d * (1 - IN), immediateRender: false }, t + d * IN);
+    return { d, reveal: t + d * (OUT + IN) / 2 };
+  },
+
   // The page moves up to the next slide.
   slide(tl, i, t) {
     const d = SETTINGS.travelVH;
@@ -381,9 +492,9 @@ const TRANSITIONS = {
   // Current slide fades to the background, then the next one fades in.
   fade(tl, i, t) {
     const d = SETTINGS.fadeVH;
-    tl.to(frame, { autoAlpha: 0, ease: "power1.in", duration: d * 0.45 }, t);
+    tl.to([frame, backdropsEl], { autoAlpha: 0, ease: "power1.in", duration: d * 0.45 }, t);
     tl.set(strip, { yPercent: -(i / N) * 100 }, t + d * 0.5);
-    tl.to(frame, { autoAlpha: 1, ease: "power1.out", duration: d * 0.45 }, t + d * 0.55);
+    tl.to([frame, backdropsEl], { autoAlpha: 1, ease: "power1.out", duration: d * 0.45 }, t + d * 0.55);
     return { d, reveal: t + d * 0.5 };
   },
 
@@ -391,42 +502,67 @@ const TRANSITIONS = {
   // slide (Stride cover: the cane). The rest of that slide clears first, the
   // sequence fades out around `fadeAt` (a Blender frame number), then this
   // slide fades in. You're in control: stopping leaves it where it is.
+  //   scrub: { sequence, fadeAt,     the sequence, and the Blender frame it's gone by
+  //            over | area,          where it sits: on a layer of the previous slide (whose still it
+  //                                  takes over from), or area [x, y, w, h] = frames the size of the slide
+  //            replaces,             (with area) a layer of the previous slide that frame 0 stands in for
+  //                                  (or any name, when the slide's `bg` image leaves the render out)
+  //            vh, lead, fadeInVH,   scroll for the sequence, share of it the text takes to clear first,
+  //                                  and scroll for this slide's fade-in afterwards
+  //            fadeOut,              share of the sequence it fades out over, ending at fadeAt (0.12)
+  //            shrink }              scale the render down to this as it plays (to stay on screen)
   scrub(tl, i, t) {
-    const d = SETTINGS.scrubVH;
     const o = SLIDES[i].scrub, prev = i - 1;
-    const p = makeSequence(o.sequence, prev, o.over);
+    const p = makeSequence(o.sequence, prev, o.over, o.area);
     if (!p) return TRANSITIONS.fade(tl, i, t);
-    const still = SLIDES[prev].layerEls[o.over];
-    const PLAY = 0.86;                                  // share of the scroll the sequence takes
-    const fadeEnd = p.at(o.fadeAt) * PLAY;              // gone by `fadeAt`…
-    const fadeStart = fadeEnd - 0.1;                    // …fading over the frames before it
+    const before = SLIDES[prev];
+    const P = o.vh ?? SETTINGS.scrubVH * 0.86;          // scroll while the sequence plays
+    const start = t + P * (o.lead ?? 0);                 // the text clears first
+    const gone = start + P * p.at(o.fadeAt);             // the sequence is gone by `fadeAt`…
+    const fadeStart = gone - P * (o.fadeOut ?? 0.12);    // …fading over the frames before it
+    const F = o.fadeInVH ?? SETTINGS.scrubVH * 0.15;     // then this slide fades in
+    const d = gone - t + F;
     const state = { f: 0 };
-    gsap.set(p.el, { autoAlpha: 0 });
+    gsap.set(p.el, { transformOrigin: "50% 50%" });
 
-    tl.set(p.el, { autoAlpha: 1 }, t);                  // the canvas takes over from the still
-    tl.set(still, { autoAlpha: 0 }, t);
-    tl.to(imgs[prev], { autoAlpha: 0, ease: "power1.in", duration: d * 0.1 }, t);   // the text clears first
-    tl.to(state, { f: p.n - 1, ease: "none", duration: d * PLAY, onUpdate: () => p.draw(state.f) }, t);
-    tl.to(p.el, { autoAlpha: 0, ease: "power1.in", duration: d * (fadeEnd - fadeStart) }, t + d * fadeStart);
-    tl.set(strip, { yPercent: -(i / N) * 100 }, t + d * fadeEnd);
-    tl.set(frame, { autoAlpha: 0 }, t + d * fadeEnd);
-    tl.to(frame, { autoAlpha: 1, ease: "power1.out", duration: d * (1 - fadeEnd) }, t + d * fadeEnd);
-    return { d, reveal: t + d * fadeEnd, free: [t, t + d * fadeStart] };
+    if (o.over) {
+      // The canvas takes over from the still on the previous slide.
+      const still = before.layerEls[o.over];
+      gsap.set(p.el, { autoAlpha: 0 });
+      tl.set(p.el, { autoAlpha: 1 }, t);
+      tl.set(still, { autoAlpha: 0 }, t);
+    } else if (o.replaces) {
+      // Frame 0 *is* the still: the canvas shows on the slide from the start, in place of
+      // that layer (or of the render left out of the slide's `bg` image).
+      const still = before.layerEls?.[o.replaces];
+      if (still) gsap.set(still, { autoAlpha: 0, display: "none" });
+      before.stillEl = p.el;
+      before.stillRect = o.area;
+    }
+    tl.to(imgs[prev], { autoAlpha: 0, ease: "power1.in", duration: Math.max(P * 0.1, start - t) }, t);   // the text clears
+    tl.to(state, { f: p.n - 1, ease: "none", duration: P, onUpdate: () => p.draw(state.f) }, start);
+    if (o.shrink) tl.fromTo(p.el, { scale: 1 }, { scale: o.shrink, ease: "power1.inOut", duration: P * 0.29, immediateRender: false }, start);
+    tl.to(p.el, { autoAlpha: 0, ease: "power1.in", duration: gone - fadeStart }, fadeStart);
+    tl.set(strip, { yPercent: -(i / N) * 100 }, gone);
+    tl.set([frame, backdropsEl], { autoAlpha: 0 }, gone);
+    tl.to([frame, backdropsEl], { autoAlpha: 1, ease: "sine.inOut", duration: F }, gone);
+    return { d, reveal: gone, free: [t, fadeStart] };
   },
 
-  // The page moves up with the product still assembled; then its render
+  // The slide fades in (a beat) with the product still assembled; then its render
   // sequences play side by side, exploding it, hand over to the sharp stills
-  // from Figma, and the labels draw in. Short, so one wheel notch plays it all.
+  // from Figma, and the labels draw in. Its length is SETTINGS.explodeVH.
   explode(tl, i, t) {
-    const d = SETTINGS.explodeVH;
     const s = SLIDES[i];
-    const PLAY = [0.24, 0.8];                           // when the sequences play (share of d)
+    const IN = TRANSITIONS.beat(tl, i, t).d * 0.9;      // the fade-in, then (overlapping its end) the explode
+    const d = IN + SETTINGS.explodeVH;
+    const PLAY = [IN / d, IN / d + (SETTINGS.explodeVH / d) * 0.68];   // when the sequences play (share of d)
     const play = d * (PLAY[1] - PLAY[0]);
-
-    tl.to(strip, { yPercent: -(i / N) * 100, ease: "power2.inOut", duration: d * 0.32 }, t);
+    const LABELS = PLAY[1] - 0.04;                      // labels start just after the hand-off to the stills
+    const labelSpan = 1 - LABELS - 0.18;                // (the last label finishes as the explode ends)
 
     const centres = [];
-    s.explode.forEach(({ sequence, over, fit }) => {
+    s.explode.forEach(({ sequence, over, fit, until }) => {
       const p = makeSequence(sequence, i, over);
       const still = s.layerEls[over];
       if (!p) return;
@@ -441,7 +577,8 @@ const TRANSITIONS = {
       centres.push(r[0] + r[2] / 2);
       const state = { f: 0 };
       gsap.set(still, { autoAlpha: 0 });
-      tl.to(state, { f: p.n - 1, ease: "power1.inOut", duration: play, onUpdate: () => p.draw(state.f) }, t + d * PLAY[0]);
+      const last = until ? p.at(until) * (p.n - 1) : p.n - 1;      // `until`: stop at this Blender frame
+      tl.to(state, { f: last, ease: "power1.inOut", duration: play, onUpdate: () => p.draw(state.f) }, t + d * PLAY[0]);
       // A small kick as it bursts open.
       tl.fromTo(p.el, { scale: 0.93 }, { scale: 1, ease: "expo.out", duration: play, immediateRender: false }, t + d * PLAY[0]);
       tl.to(p.el, { autoAlpha: 0, ease: "none", duration: d * 0.08 }, t + d * (PLAY[1] - 0.02));
@@ -457,7 +594,7 @@ const TRANSITIONS = {
       .map(([name, L]) => ({ el: s.layerEls[name], L, gap: Math.abs(mid(L.rect) - near(L.rect)) }))
       .sort((a, b) => a.gap - b.gap || a.L.rect[1] - b.L.rect[1])
       .forEach(({ el, L }, k, all) => {
-        const at = t + d * (0.76 + 0.16 * (k / Math.max(1, all.length - 1)));   // after the hand-off to the stills
+        const at = t + d * (LABELS + labelSpan * (k / Math.max(1, all.length - 1)));   // after the hand-off to the stills
         const leftOfProduct = mid(L.rect) < near(L.rect);
         if (L.type === "TEXT") {
           gsap.set(el, { autoAlpha: 0 });
@@ -470,7 +607,7 @@ const TRANSITIONS = {
                         { clipPath: "inset(0% 0% 0% 0%)", ease: "power2.out", duration: d * 0.1, immediateRender: false }, at);
         }
       });
-    return { d, reveal: t };
+    return { d, reveal: t + IN / 2 };
   },
 };
 
@@ -492,13 +629,19 @@ const ANIMATIONS = {
 
   // Solus 2: the sole render drifts up into place from the lower right, faster
   // than the page (parallax), and keeps rising as the slide leaves.
+  //  (If a scroll-played sequence's first frame stands in for the render — Solus
+  //  Structures — that canvas drifts instead; it then stays put as the sequence plays.)
   drift(tl, s, from, to, leave) {
-    const el = s.layerEls?.render;
-    if (!el) return;
-    const start = { xPercent: 14, yPercent: 32, rotation: -7, scale: 1.12 };
-    gsap.set(el, { transformOrigin: "60% 60%", ...start });
+    const L = s.fig.layers?.render;
+    const el = s.stillEl || s.layerEls?.render;
+    if (!el || !L) return;
+    // Offsets are measured on the render's box; convert them to the element's own box.
+    const [rx, ry, rw, rh] = L.rect, [ex, ey, ew, eh] = s.stillRect || L.rect;
+    const kx = rw / ew, ky = rh / eh;
+    const start = { xPercent: 14 * kx, yPercent: 32 * ky, rotation: -7, scale: 1.12 };
+    gsap.set(el, { transformOrigin: `${((rx + 0.6 * rw - ex) / ew) * 100}% ${((ry + 0.6 * rh - ey) / eh) * 100}%`, ...start });
     tl.fromTo(el, start, { xPercent: 0, yPercent: 0, rotation: 0, scale: 1, ease: "power3.out", duration: to - from, immediateRender: false }, from);
-    if (leave) tl.to(el, { yPercent: -28, xPercent: -4, rotation: 3, ease: "power1.in", duration: leave.d * 0.8 }, leave.t);
+    if (leave && !s.stillEl) tl.to(el, { yPercent: -28 * ky, xPercent: -4 * kx, rotation: 3, ease: "power1.in", duration: leave.d * 0.8 }, leave.t);
   },
 };
 
@@ -515,9 +658,9 @@ function buildStage() {
   let t = 0;
   SLIDES.forEach((s, i) => {
     if (i > 0) {
-      const type = TRANSITIONS[s.transition] ? s.transition : "slide";
+      const type = TRANSITIONS[s.transition] ? s.transition : "beat";
       if (s.transition && !TRANSITIONS[s.transition])
-        console.warn(`[v2] Unknown transition "${s.transition}" on slide ${i + 1} — using "slide".`);
+        console.warn(`[v2] Unknown transition "${s.transition}" on slide ${i + 1} — using "beat".`);
       const { d, reveal, free: f } = TRANSITIONS[type](tl, i, t);
       arrive[i] = { t, d, reveal };
       if (f) free.push(f);
@@ -537,11 +680,12 @@ function buildStage() {
     const anim = ANIMATIONS[s.animate];
     if (!anim) { console.warn(`[v2] Unknown animate "${s.animate}" on slide ${i + 1}.`); return; }
     const from = arrive[i] ? arrive[i].reveal : 0;
-    const to = stops[i].start + (stops[i].end - stops[i].start) * 0.7;     // done just as you land
+    const to = stops[i].start + Math.min((stops[i].end - stops[i].start) * 0.7, 12);   // done just as you land
     anim(tl, s, from, Math.max(to, from + 1), arrive[i + 1]);
   });
 
   buildContents(tl, arrive);
+  buildBackdrops(tl, arrive);
   tl.set({}, {}, total);   // make the timeline exactly `total` long
 
   // The page is tall enough to scroll through the whole timeline.
@@ -595,7 +739,7 @@ function buildContents(tl, arrive) {
   //    Everything is driven by one scrubbed value, so scrolling back reverses it.
   const leave = arrive[ci + 1];
   if (!CONTENTS.morph || !leave) return;
-  const brand = document.getElementById("brand");
+
   const layer = document.getElementById("morph");
 
   const tiles = CONTENTS.tiles.map((tile) => {
@@ -638,7 +782,7 @@ function buildContents(tl, arrive) {
     const fr = frame.getBoundingClientRect();
     const u = fr.width / SLIDE_W;                              // screen px per Figma point
     const navIn = ramp(0.82, 1, p);                            // the real nav takes over at the end
-    gsap.set([nav, brand], { autoAlpha: navIn });
+    gsap.set(nav, { autoAlpha: navIn });            // (the name stays in the bar throughout)
     layer.style.visibility = p > 0 && p < 1 ? "visible" : "hidden";
 
     tiles.forEach(({ el, img, label, hole, tile }, k) => {
